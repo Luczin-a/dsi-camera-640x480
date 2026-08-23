@@ -2,6 +2,7 @@
 #include "calico/nds/pxi.h"
 
 #include <nds.h>
+#include <stdio.h>
 
 // https://problemkaputt.de/gbatek-dsi-cameras.htm
 
@@ -78,9 +79,15 @@ void cameraTransferStart(u16 *dst, CaptureMode mode) {
 	REG_NDMA1SAD  = (u32)&REG_CAM_DAT;                     // source CAM_DTA
 	REG_NDMA1DAD  = (u32)dst;                              // dest RAM/VRAM
 	REG_NDMA1TCNT = (preview ? 256 * 192 : 640 * 480) / 2; // total length in words
-	REG_NDMA1WCNT = preview ? 512 : 320;                   // block length in words
+	REG_NDMA1WCNT = preview ? 512 : 640;                   // block length in words (FIXED: was 320)
 	REG_NDMA1BCNT = 2;                                     // timing interval or so
 	REG_NDMA1CNT  = 0x8B044000;                            // start camera DMA
+
+	if(!preview) {
+		printf("[CAMERA] Starting 640x480 capture\n");
+		printf("[CAMERA] WCNT set to: 640\n");
+		printf("[CAMERA] TCNT set to: %u\n", (640 * 480) / 2);
+	}
 }
 
 void cameraTransferStop() { REG_CAM_CNT &= ~BIT(15); }
