@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 	while(1) {
 		swiWaitForVBlank();
 
-		cameraTransferStart(bgGetGfxPtr(bg3Main), CAPTURE_MODE_PREVIEW);
+		cameraTransferStart(bgGetGfxPtr(bg3Main), CAPTURE_MODE_CAPTURE);
 		while(cameraTransferActive())
 			swiDelay(100);
 
