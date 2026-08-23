@@ -60,68 +60,104 @@ int main(int argc, char **argv) {
 	Camera camera = CAM_OUTER;
 	cameraActivate(camera);
 
-	char vidName[32];
-	sprintf(vidName, "/DCIM/100DSI00/VID_%04d.BIN", getVideoNumber());
-	FILE *out = fopen(vidName, "wb");
-
-	printf("\nIt's recording!\n");
-	printf("START to finish\n\n");
-	printf("Output file:\n%s\n", vidName);
-
-	// Allocate frame buffer on heap (640×480×2 bytes)
-	u16 *framebuf = (u16 *)malloc(640 * 480 * 2);
-	if(framebuf == NULL) {
-		printf("ERROR: Failed to allocate frame buffer!\n");
-		printf("Out of memory.\n");
-		cameraDeactivate(camera);
-		fclose(out);
-		return 0;
-	}
-	printf("Frame buffer allocated: 640x480\n");
-	printf("Buffer size: %u bytes\n\n", 640 * 480 * 2);
-
-	cpuStartTiming(0);
-	uint32_t frameCount = 0;
+	printf("\nL/R to start recording\n");
+	printf("START to finish\n");
 
 	while(1) {
-		swiWaitForVBlank();
+		u16 pressed;
+		do {
+			swiWaitForVBlank();
+			if(!cameraTransferActive())
+				cameraTransferStart(bgGetGfxPtr(bg3Main), CAPTURE_MODE_PREVIEW);
+			scanKeys();
+			pressed = keysDown();
+		} while(!pressed);
 
-		// Capture frame into heap buffer instead of VRAM
-		cameraTransferStart(framebuf, CAPTURE_MODE_CAPTURE);
-		while(cameraTransferActive())
-			swiDelay(100);
+		if(pressed & KEY_A) {
+			// Wait for previous transfer to finish
+			while(cameraTransferActive())
+				swiWaitForVBlank();
+			cameraTransferStop();
 
-		// Write frame data to file (640x480 YUV)
-		size_t written = fwrite(framebuf, 1, 640 * 480 * 2, out);
-		if(written != 640 * 480 * 2) {
-			printf("ERROR: File write failed at frame %u\n", frameCount);
-			printf("Written: %u bytes, expected: %u\n", (unsigned int)written, 640 * 480 * 2);
-			cameraDeactivate(camera);
-			fclose(out);
+			// Switch camera
+			camera = camera == CAM_INNER ? CAM_OUTER : CAM_INNER;
+			cameraActivate(camera);
+
+			printf("Swapped to %s camera\n", camera == CAM_INNER ? "inner" : "outer");
+		} else if(fatInited && pressed & (KEY_L | KEY_R)) {
+			printf("Recording...\n");
+
+			// Wait for previous transfer to finish
+			while(cameraTransferActive())
+				swiWaitForVBlank();
+			cameraTransferStop();
+
+			char vidName[32];
+			sprintf(vidName, "/DCIM/100DSI00/VID_%04d.BIN", getVideoNumber());
+			FILE *out = fopen(vidName, "wb");
+
+			if(out == NULL) {
+				printf("ERROR: Failed to open file!\n");
+				cameraDeactivate(camera);
+				return 0;
+			}
+
+			// Allocate frame buffer for 640x480
+			u16 *framebuf = (u16 *)malloc(640 * 480 * sizeof(u16));
+			if(framebuf == NULL) {
+				printf("ERROR: Failed to allocate!\n");
+				cameraDeactivate(camera);
+				fclose(out);
+				return 0;
+			}
+
+			printf("Buffer allocated, switching mode...\n");
+
+			// Switch to capture mode
+			cameraTransferStart(framebuf, CAPTURE_MODE_CAPTURE);
+			while(cameraTransferActive())
+				swiWaitForVBlank();
+
+			printf("Recording started (press START)\n");
+
+			uint32_t frameCount = 0;
+
+			while(1) {
+				swiWaitForVBlank();
+
+				// Capture frame
+				cameraTransferStart(framebuf, CAPTURE_MODE_CAPTURE);
+				while(cameraTransferActive())
+					swiDelay(100);
+
+				// Write to file
+				size_t written = fwrite(framebuf, 1, 640 * 480 * 2, out);
+				if(written != 640 * 480 * 2) {
+					printf("Write error at frame %u\n", frameCount);
+					break;
+				}
+
+				frameCount++;
+				if(frameCount % 10 == 0)
+					printf("Frames: %u\n", frameCount);
+
+				scanKeys();
+				if(keysDown() & KEY_START) {
+					break;
+				}
+			}
+
+			printf("Recording stopped.\n");
+			printf("Frames: %u\n", frameCount);
+			
 			free(framebuf);
-			return 0;
-		}
-
-		// Write frame timing metadata
-		u32 time = cpuGetTiming();
-		if(fwrite(&time, 4, 1, out) != 1) {
-			printf("ERROR: Timing write failed at frame %u\n", frameCount);
-			cameraDeactivate(camera);
 			fclose(out);
-			free(framebuf);
-			return 0;
-		}
-		cpuStartTiming(0);
-		frameCount++;
 
-		scanKeys();
-		if(keysDown() & KEY_START) {
-			printf("\nRecording stopped.\n");
-			printf("Frames recorded: %u\n", frameCount);
+			// Return to preview mode
+			cameraTransferStart(bgGetGfxPtr(bg3Main), CAPTURE_MODE_PREVIEW);
+		} else if(pressed & KEY_START) {
 			// Disable camera so the light turns off
 			cameraDeactivate(camera);
-			fclose(out);
-			free(framebuf);
 
 			return 0;
 		}
