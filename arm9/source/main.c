@@ -5,6 +5,7 @@
 #include <fat.h>
 #include <nds.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 int getVideoNumber() {
 	int highest = -1;
@@ -67,30 +68,58 @@ int main(int argc, char **argv) {
 	printf("START to finish\n\n");
 	printf("Output file:\n%s\n", vidName);
 
+	// Allocate frame buffer on heap (256×192×2 bytes)
+	u16 *framebuf = (u16 *)malloc(256 * 192 * 2);
+	if(framebuf == NULL) {
+		printf("ERROR: Failed to allocate frame buffer!\n");
+		printf("Out of memory.\n");
+		cameraDeactivate(camera);
+		fclose(out);
+		return 0;
+	}
+
 	cpuStartTiming(0);
+	uint32_t frameCount = 0;
 
 	while(1) {
 		swiWaitForVBlank();
 
-		cameraTransferStart(bgGetGfxPtr(bg3Main), CAPTURE_MODE_CAPTURE);
+		// Capture frame into heap buffer instead of VRAM
+		cameraTransferStart(framebuf, CAPTURE_MODE_CAPTURE);
 		while(cameraTransferActive())
 			swiDelay(100);
 
-		if(fwrite(bgGetGfxPtr(bg3Main), 1, 256 * 192 * 2, out) != 256 * 192 * 2) {
+		// Write frame data to file
+		size_t written = fwrite(framebuf, 1, 256 * 192 * 2, out);
+		if(written != 256 * 192 * 2) {
+			printf("ERROR: File write failed at frame %u\n", frameCount);
+			printf("Written: %u bytes, expected: %u\n", (unsigned int)written, 256 * 192 * 2);
 			cameraDeactivate(camera);
 			fclose(out);
+			free(framebuf);
 			return 0;
 		}
 
+		// Write frame timing metadata
 		u32 time = cpuGetTiming();
-		fwrite(&time, 4, 1, out);
+		if(fwrite(&time, 4, 1, out) != 1) {
+			printf("ERROR: Timing write failed at frame %u\n", frameCount);
+			cameraDeactivate(camera);
+			fclose(out);
+			free(framebuf);
+			return 0;
+		}
 		cpuStartTiming(0);
+		frameCount++;
 
 		scanKeys();
 		if(keysDown() & KEY_START) {
+			printf("\nRecording stopped.\n");
+			printf("Frames recorded: %u\n", frameCount);
 			// Disable camera so the light turns off
 			cameraDeactivate(camera);
 			fclose(out);
+			free(framebuf);
 
 			return 0;
 		}
