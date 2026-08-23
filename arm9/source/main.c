@@ -68,8 +68,8 @@ int main(int argc, char **argv) {
 	printf("START to finish\n\n");
 	printf("Output file:\n%s\n", vidName);
 
-	// Allocate frame buffer on heap (256×192×2 bytes)
-	u16 *framebuf = (u16 *)malloc(256 * 192 * 2);
+	// Allocate frame buffer on heap (640×480×2 bytes)
+	u16 *framebuf = (u16 *)malloc(640 * 480 * 2);
 	if(framebuf == NULL) {
 		printf("ERROR: Failed to allocate frame buffer!\n");
 		printf("Out of memory.\n");
@@ -77,6 +77,8 @@ int main(int argc, char **argv) {
 		fclose(out);
 		return 0;
 	}
+	printf("Frame buffer allocated: 640x480\n");
+	printf("Buffer size: %u bytes\n\n", 640 * 480 * 2);
 
 	cpuStartTiming(0);
 	uint32_t frameCount = 0;
@@ -89,11 +91,11 @@ int main(int argc, char **argv) {
 		while(cameraTransferActive())
 			swiDelay(100);
 
-		// Write frame data to file
-		size_t written = fwrite(framebuf, 1, 256 * 192 * 2, out);
-		if(written != 256 * 192 * 2) {
+		// Write frame data to file (640x480 YUV)
+		size_t written = fwrite(framebuf, 1, 640 * 480 * 2, out);
+		if(written != 640 * 480 * 2) {
 			printf("ERROR: File write failed at frame %u\n", frameCount);
-			printf("Written: %u bytes, expected: %u\n", (unsigned int)written, 256 * 192 * 2);
+			printf("Written: %u bytes, expected: %u\n", (unsigned int)written, 640 * 480 * 2);
 			cameraDeactivate(camera);
 			fclose(out);
 			free(framebuf);
