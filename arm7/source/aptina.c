@@ -2,6 +2,9 @@
 
 #include "aptina_i2c.h"
 
+#include <nds.h>
+#include <stdio.h>
+
 u8 currentDevice = I2C_CAM0;
 
 // Waits until the bits of the register are clear
@@ -156,6 +159,14 @@ void deactivate(u8 device) {
 }
 
 void setMode(CaptureMode mode) {
+	printf("[ARM7] setMode called with mode: %d\n", mode);
+	printf("[ARM7] Before: 0xA103 = 0x%04X\n", aptReadMcu(currentDevice, 0xA103));
+	
 	aptWriteMcu(currentDevice, 0xA103, mode);
+	
+	printf("[ARM7] After write: 0xA103 = 0x%04X\n", aptReadMcu(currentDevice, 0xA103));
+	
 	aptWaitMcuClr(currentDevice, 0xA103, 0xFFFF);
+	
+	printf("[ARM7] After wait: 0xA103 = 0x%04X\n", aptReadMcu(currentDevice, 0xA103));
 }
